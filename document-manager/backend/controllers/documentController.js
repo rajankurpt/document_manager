@@ -97,14 +97,37 @@ exports.download = async (req, res) => {
 
 exports.mergeExcel = async (req, res) => {
   try {
-    const paths = await Doc.findAllExcelPaths(req.user);
-    const existing = paths.filter(p => fs.existsSync(p));
-    if (!existing.length) return res.status(400).json({ message: 'No Excel files to merge' });
+    const { documentIds } = req.body;
+    
+    if (!documentIds || !Array.isArray(documentIds) || documentIds.length < 2) {
+      return res.status(400).json({ message: 'Please select at least 2 Excel files to merge' });
+    }
 
-    const outPath = mergeExcelFiles(existing, path.join(process.cwd(), 'uploads'));
+    // Get file paths for selected documents
+    const selectedDocs = await Promise.all(
+      documentIds.map(id => Doc.findById(id, req.user))
+    );
+
+    const validDocs = selectedDocs.filter(doc => 
+      doc && doc.file_path && 
+      (doc.file_path.toLowerCase().endsWith('.xlsx') || doc.file_path.toLowerCase().endsWith('.xls'))
+    );
+
+    if (validDocs.length < 2) {
+      return res.status(400).json({ message: 'Please select at least 2 valid Excel files to merge' });
+    }
+
+    const filePaths = validDocs.map(doc => doc.file_path);
+    const existingPaths = filePaths.filter(p => fs.existsSync(p));
+    
+    if (existingPaths.length < 2) {
+      return res.status(400).json({ message: 'Some selected files are not found on server' });
+    }
+
+    const outPath = mergeExcelFiles(existingPaths, path.join(process.cwd(), 'uploads'));
     const mergedId = await Doc.insertMergedExcel(outPath, req.user.id);
 
-    res.json({ message: 'Merged', mergedFile: outPath, id: mergedId });
+    res.json({ message: 'Excel files merged successfully', mergedFile: outPath, id: mergedId });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Merge failed' });
@@ -113,11 +136,33 @@ exports.mergeExcel = async (req, res) => {
 
 exports.mergePdf = async (req, res) => {
   try {
-    const paths = await Doc.findAllPdfPaths(req.user);
-    const existing = paths.filter(p => fs.existsSync(p));
-    if (existing.length < 2) return res.status(400).json({ message: 'Need at least 2 PDF files to merge' });
+    const { documentIds } = req.body;
     
-    const outPath = await mergePdfFiles(existing, path.join(process.cwd(), 'uploads'));
+    if (!documentIds || !Array.isArray(documentIds) || documentIds.length < 2) {
+      return res.status(400).json({ message: 'Please select at least 2 PDF files to merge' });
+    }
+
+    // Get file paths for selected documents
+    const selectedDocs = await Promise.all(
+      documentIds.map(id => Doc.findById(id, req.user))
+    );
+
+    const validDocs = selectedDocs.filter(doc => 
+      doc && doc.file_path && doc.file_path.toLowerCase().endsWith('.pdf')
+    );
+
+    if (validDocs.length < 2) {
+      return res.status(400).json({ message: 'Please select at least 2 valid PDF files to merge' });
+    }
+
+    const filePaths = validDocs.map(doc => doc.file_path);
+    const existingPaths = filePaths.filter(p => fs.existsSync(p));
+    
+    if (existingPaths.length < 2) {
+      return res.status(400).json({ message: 'Some selected files are not found on server' });
+    }
+    
+    const outPath = await mergePdfFiles(existingPaths, path.join(process.cwd(), 'uploads'));
     const mergedId = await Doc.insertMergedPdf(outPath, req.user.id);
     
     res.json({ message: 'PDFs merged successfully', mergedFile: outPath, id: mergedId });

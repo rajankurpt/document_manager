@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = 'your_jwt_secret'; // Should be in .env
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret'; // Should be in .env
 
 const protect = (req, res, next) => {
   let token;
@@ -30,4 +30,4 @@ const protect = (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+module.exports = protect;

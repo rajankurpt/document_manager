@@ -11,7 +11,29 @@ const Document = {
 
   async findAll(user) {
     if (user.role === 'Admin') {
-      const [rows] = await pool.query('SELECT * FROM documents ORDER BY created_at DESC');
+      console.log('Admin user ID:', user.id);
+      
+      // First, let's check for any orphaned documents
+      const [orphanedDocs] = await pool.query(`
+        SELECT d.* FROM documents d 
+        LEFT JOIN users u ON d.user_id = u.id 
+        WHERE u.id IS NULL
+      `);
+      console.log('Orphaned documents:', orphanedDocs);
+      
+      const [rows] = await pool.query(`
+        SELECT d.*, 
+               COALESCE(u.username, 'Unknown User') as username,
+               CASE 
+                 WHEN d.user_id = ? THEN '(You)'
+                 WHEN u.username IS NULL THEN 'Unknown User'
+                 ELSE u.username 
+               END as display_name
+        FROM documents d 
+        LEFT JOIN users u ON d.user_id = u.id 
+        ORDER BY d.created_at DESC
+      `, [user.id]);
+      console.log('Admin query results:', rows);
       return rows;
     } else {
       const [rows] = await pool.query(

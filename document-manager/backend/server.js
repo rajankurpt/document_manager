@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -10,7 +11,7 @@ initDb();
 
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Disposition'],
@@ -24,4 +25,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/documents', docRoutes);
 
 const PORT = process.env.PORT || 5005;
-app.listen(PORT, () => console.log(` Server running at http://localhost:${PORT}`));
+
+// For AWS Lambda
+if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  const serverless = require('serverless-http');
+  module.exports.handler = serverless(app);
+} else {
+  // For local development and other platforms
+  app.listen(PORT, () => console.log(` Server running at http://localhost:${PORT}`));
+}
