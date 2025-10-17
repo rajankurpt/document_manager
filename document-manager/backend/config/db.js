@@ -26,18 +26,42 @@ const initDb = async () => {
     `);
     console.log('Users table is ready.');
 
-    // Add user_id to documents table if it doesn't exist
-    const [rows] = await connection.query(`
-      SHOW COLUMNS FROM documents LIKE 'user_id';
+    // Create documents table if it doesn't exist
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        filepath VARCHAR(255) NOT NULL,
+        filetype VARCHAR(50) NOT NULL,
+        size INT NOT NULL,
+        folder_name VARCHAR(255) DEFAULT NULL,
+        user_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
     `);
+    console.log('Documents table is ready.');
 
-    if (rows.length === 0) {
+    // Add session column if it doesn't exist
+    const [sessionRows] = await connection.query(`
+      SHOW COLUMNS FROM documents LIKE 'session';
+    `);
+    if (sessionRows.length === 0) {
       await connection.query(`
-        ALTER TABLE documents
-        ADD COLUMN user_id INT,
-        ADD FOREIGN KEY (user_id) REFERENCES users(id);
+        ALTER TABLE documents ADD COLUMN session VARCHAR(20);
       `);
-      console.log('documents table updated with user_id.');
+      console.log('documents table updated with session.');
+    }
+
+    // Add semester column if it doesn't exist
+    const [semesterRows] = await connection.query(`
+      SHOW COLUMNS FROM documents LIKE 'semester';
+    `);
+    if (semesterRows.length === 0) {
+      await connection.query(`
+        ALTER TABLE documents ADD COLUMN semester INT;
+      `);
+      console.log('documents table updated with semester.');
     }
 
     connection.release();

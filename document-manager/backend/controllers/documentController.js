@@ -4,7 +4,7 @@ const Doc = require('../models/Document');
 const { mergeExcelFiles, mergePdfFiles } = require('../services/mergeService');
 
 exports.upload = async (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, session, semester } = req.body;
   const filePath = req.file.path;
   const userId = req.user.id; // From authMiddleware
 
@@ -13,7 +13,7 @@ exports.upload = async (req, res) => {
   }
 
   try {
-    const doc = await Doc.create({ title, description, filePath, userId });
+    const doc = await Doc.create({ title, description, filePath, userId, session, semester });
     res.status(201).json({ message: 'Document uploaded successfully.', document: doc });
   } catch (error) {
     console.error('Error uploading document:', error);

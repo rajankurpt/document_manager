@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import DocumentUpload from './DocumentUpload'; // Import the new component
+import DocumentList from './DocumentList';     // Import the new component
 import './Dashboard.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5005/api/documents';
@@ -7,6 +9,7 @@ const AUTH_API_URL = process.env.REACT_APP_AUTH_API_URL || 'http://localhost:500
 
 const Dashboard = ({ user, setUser }) => {
   const [documents, setDocuments] = useState([]);
+  const [filteredDocuments, setFilteredDocuments] = useState([]);
   const [message, setMessage] = useState('');
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -21,6 +24,12 @@ const Dashboard = ({ user, setUser }) => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [newPassword, setNewPassword] = useState('');
+  const [mergedFileName, setMergedFileName] = useState('');
+
+  // Search and filter states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterSession, setFilterSession] = useState('');
+  const [filterSemester, setFilterSemester] = useState('');
 
   const getDocuments = async () => {
     try {
@@ -40,6 +49,18 @@ const Dashboard = ({ user, setUser }) => {
       getUsers();
     }
   }, [user.role]);
+
+  useEffect(() => {
+    let filtered = documents.filter(doc => {
+      const searchTermMatch = searchTerm.toLowerCase() 
+        ? doc.title.toLowerCase().includes(searchTerm.toLowerCase()) || (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        : true;
+      const sessionMatch = filterSession ? doc.session === filterSession : true;
+      const semesterMatch = filterSemester ? String(doc.semester) === filterSemester : true;
+      return searchTermMatch && sessionMatch && semesterMatch;
+    });
+    setFilteredDocuments(filtered);
+  }, [searchTerm, filterSession, filterSemester, documents]);
 
   const getUsers = async () => {
     try {
@@ -107,23 +128,6 @@ const Dashboard = ({ user, setUser }) => {
     }
   };
 
-  const handleUpload = async (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.target);
-    const token = localStorage.getItem('token');
-    try {
-      const response = await axios.post(`${API_URL}/upload`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setMessage(response.data.message);
-      getDocuments();
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'Error uploading document.');
-    }
-  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -261,12 +265,16 @@ const Dashboard = ({ user, setUser }) => {
       setMessage('Please select at least 2 files to merge.');
       return;
     }
+    if (!mergedFileName) {
+      setMessage('Please enter a name for the merged file.');
+      return;
+    }
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
         `${API_URL}/merge/${mergeType}`,
-        { documentIds: selectedDocs },
+        { documentIds: selectedDocs, mergedFileName },
         {
           headers: {
             'Content-Type': 'application/json',
@@ -280,6 +288,7 @@ const Dashboard = ({ user, setUser }) => {
       setMessage(`Successfully merged ${selectedDocs.length} ${mergeType.toUpperCase()} files!`);
       setShowMergeModal(false);
       setSelectedDocs([]);
+      setMergedFileName('');
       getDocuments();
     } catch (error) {
       setMessage(error.response?.data?.message || `Error merging ${mergeType} files.`);
@@ -290,176 +299,140 @@ const Dashboard = ({ user, setUser }) => {
 
   return (
     <div className="dashboard-bg">
-      <nav className="dashboard-navbar">
-        <div className="dashboard-navbar-brand">Document Manager</div>
-        <div className="dashboard-navbar-user">
-          <span>Welcome, <b>{user.username}</b> ({user.role})</span>
-          <button className="dashboard-logout-btn" onClick={handleLogout}>Logout</button>
+      <header className="dashboard-header">
+        <div className="header-title">
+          <h1>Document Management System</h1>
+          <p>{user.role} Dashboard</p>
         </div>
-      </nav>
-      <main className="dashboard-main">
-        <section className="dashboard-card dashboard-upload-card">
-          <h2>Upload Document</h2>
-          <form onSubmit={handleUpload} className="dashboard-form">
-            <input type="text" name="title" placeholder="Title" required className="dashboard-input" />
-            <textarea name="description" placeholder="Description" className="dashboard-input" />
-            <input type="file" name="file" required className="dashboard-input" />
-            <button type="submit" className="dashboard-btn dashboard-btn-primary">Upload</button>
-          </form>
-          {message && <div className={`dashboard-alert ${message.toLowerCase().includes('error') ? 'dashboard-alert-error' : 'dashboard-alert-success'}`}>{message}</div>}
-        </section>
-        <section className="dashboard-card dashboard-actions-card">
-          <h2>Actions</h2>
-          <button onClick={handleMergeExcel} className="dashboard-btn dashboard-btn-sky">Merge Excel Files</button>
-          <button onClick={handleMergePdf} className="dashboard-btn dashboard-btn-navy">Merge PDF Files</button>
+        <div className="header-actions">
+          <button onClick={handleMergeExcel} className="header-action-btn">Merge Excel</button>
+          <button onClick={handleMergePdf} className="header-action-btn">Merge PDF</button>
           {user.role === 'Admin' && (
             <>
-              <button onClick={() => setShowUserModal(true)} className="dashboard-btn dashboard-btn-primary">Add User</button>
-              <button onClick={() => setShowUserList(!showUserList)} className="dashboard-btn dashboard-btn-secondary">
+              <button onClick={() => setShowUserModal(true)} className="add-user-btn">+ Add User</button>
+              <button onClick={() => setShowUserList(!showUserList)} className="header-action-btn">
                 {showUserList ? 'Hide Users' : 'Show Users'}
               </button>
             </>
           )}
-        </section>
-        <section className="dashboard-card dashboard-documents-card">
-          <h2>{user.role === 'Admin' ? 'All User Documents' : 'Your Documents'}</h2>
-          <div className="dashboard-doc-list">
-            {documents.length === 0 && <div className="dashboard-empty">No documents found. Upload your first document!</div>}
-            {user.role === 'Admin' ? (
-              // Admin view: Group documents by user
-              <div className="dashboard-admin-view">
-                {Object.entries(groupDocumentsByUser(documents)).map(([displayName, userDocs]) => (
-                  <div key={displayName} className="dashboard-user-section">
-                    <h3 className={`dashboard-user-title ${displayName === '(You)' ? 'you-section' : ''}`}>
-                      📁 {displayName}
-                    </h3>
-                    <div className="dashboard-user-docs">
-                      {userDocs.map((doc) => (
-                        <div key={doc.id} className="dashboard-doc-item">
-                          <div className="dashboard-doc-header">
-                            <div className="dashboard-doc-title">{doc.title}</div>
-                            <div className="dashboard-doc-actions">
-                              <button onClick={() => handleDownload(doc.id)} className="dashboard-btn dashboard-btn-sky">Download</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }} className="dashboard-btn dashboard-btn-danger">Delete</button>
-                            </div>
-                          </div>
-                          <div className="dashboard-doc-meta">
-                            <span className="dashboard-doc-type">{doc.file_path ? doc.file_path.split('.').pop().toUpperCase() : ''}</span>
-                            <span className="dashboard-doc-date">{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''}</span>
-                          </div>
-                          {doc.description && <div className="dashboard-doc-desc">{doc.description}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // Regular user view: Show all documents
-              documents.map((doc) => (
-                <div key={doc.id} className="dashboard-doc-item">
-                  <div className="dashboard-doc-header">
-                    <div className="dashboard-doc-title">{doc.title}</div>
-                    <div className="dashboard-doc-actions">
-                      <button onClick={() => handleDownload(doc.id)} className="dashboard-btn dashboard-btn-sky">Download</button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }} className="dashboard-btn dashboard-btn-danger">Delete</button>
-                    </div>
-                  </div>
-                  <div className="dashboard-doc-meta">
-                    <span className="dashboard-doc-type">{doc.file_path ? doc.file_path.split('.').pop().toUpperCase() : ''}</span>
-                    <span className="dashboard-doc-date">{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''}</span>
-                  </div>
-                  {doc.description && <div className="dashboard-doc-desc">{doc.description}</div>}
-                </div>
-              ))
-            )}
+          <div className="user-info">
+            <div className="user-avatar">{user.username.charAt(0).toUpperCase()}</div>
+            <span>Welcome, {user.username} ({user.role})</span>
           </div>
-        </section>
-        
-        {/* User Management Section for Admin */}
-        {user.role === 'Admin' && showUserList && (
-          <section className="dashboard-card dashboard-users-card">
-            <h2>User Management</h2>
-            <div className="dashboard-user-list">
-              {users.length === 0 ? (
-                <div className="dashboard-empty">No users found.</div>
-              ) : (
-                users.map((userItem) => (
-                  <div key={userItem.id} className="dashboard-user-item">
-                    <div className="dashboard-user-info">
-                      <div className="dashboard-user-name">{userItem.username}</div>
-                      <div className="dashboard-user-role">{userItem.role}</div>
-                      <div className="dashboard-user-date">
-                        Created: {new Date(userItem.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="dashboard-user-actions">
-                      <button 
-                        onClick={() => handleChangePassword(userItem.id)} 
-                        className="dashboard-btn dashboard-btn-sky"
-                      >
-                        Change Password
-                      </button>
-                      {userItem.id !== user.id && (
-                        <button 
-                          onClick={() => handleDeleteUser(userItem.id)} 
-                          className="dashboard-btn dashboard-btn-danger"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+          <button onClick={handleLogout} className="logout-btn">Logout</button>
+        </div>
+      </header>
+      <main className="dashboard-main">
+        <div className="dashboard-sidebar">
+          <section className="dashboard-card upload-card">
+            <DocumentUpload onUpload={getDocuments} />
+            {message && <div className={`dashboard-alert ${message.toLowerCase().includes('error') ? 'dashboard-alert-error' : 'dashboard-alert-success'}`}>{message}</div>}
+          </section>
+        </div>
+
+        <div className="dashboard-content">
+          <section className="dashboard-card">
+            <div className="filter-controls">
+              <input
+                type="text"
+                placeholder="Search documents..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <select value={filterSession} onChange={(e) => setFilterSession(e.target.value)}>
+                <option value="">All Sessions</option>
+                {[...new Set(documents.map(d => d.session))].map(s => s && <option key={s} value={s}>{s}</option>)}
+              </select>
+              <select value={filterSemester} onChange={(e) => setFilterSemester(e.target.value)}>
+                <option value="">All Semesters</option>
+                {[...new Set(documents.map(d => d.semester))].map(s => s && <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
           </section>
-        )}
+
+          <DocumentList documents={filteredDocuments} user={user} groupDocumentsByUser={groupDocumentsByUser} handleDownload={handleDownload} handleDelete={handleDelete} />
+          
+      {/* User List Modal */}
+      {showUserList && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal user-list-modal">
+            <div className="dashboard-modal-header">
+              <h3>Manage Users</h3>
+              <button onClick={() => setShowUserList(false)} className="dashboard-modal-close">&times;</button>
+            </div>
+            <div className="dashboard-modal-body">
+              {users.map(userItem => (
+                <div key={userItem.id} className="user-card">
+                  <div className="user-card-avatar" style={{backgroundColor: userItem.role === 'Admin' ? '#4A90E2' : '#27AE60'}}>
+                    {userItem.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="user-card-info">
+                    <p className="user-card-name">{userItem.username}</p>
+                    <p className="user-card-role-desc">{userItem.role}</p>
+                  </div>
+                  <div className="user-card-actions">
+                    <span className={`user-role-tag ${userItem.role.toLowerCase().replace(' ', '-')}`}>{userItem.role}</span>
+                    <button onClick={() => handleChangePassword(userItem.id)} className="user-edit-btn">Edit</button>
+                    {user.id !== userItem.id && (
+                      <button onClick={() => handleDeleteUser(userItem.id)} className="user-delete-btn">Delete</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="dashboard-modal-footer">
+              <button onClick={() => setShowUserList(false)} className="close-btn">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+        </div>
       </main>
       
       {/* Add User Modal */}
       {showUserModal && (
         <div className="dashboard-modal-overlay">
-          <div className="dashboard-modal">
+          <div className="dashboard-modal add-user-modal">
             <div className="dashboard-modal-header">
               <h3>Add New User</h3>
               <button onClick={() => setShowUserModal(false)} className="dashboard-modal-close">&times;</button>
             </div>
             <form onSubmit={handleCreateUser} className="dashboard-modal-body">
-              <div className="dashboard-form-group">
-                <label>Username:</label>
+              <div className="form-group">
+                <label>Username *</label>
                 <input
                   type="text"
                   value={newUser.username}
-                  onChange={(e) => setNewUser({...newUser, username: e.target.value})}
+                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                  placeholder="Enter username"
                   required
-                  className="dashboard-input"
                 />
               </div>
-              <div className="dashboard-form-group">
-                <label>Password:</label>
+              <div className="form-group">
+                <label>Password *</label>
                 <input
                   type="password"
                   value={newUser.password}
-                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  placeholder="Enter password"
                   required
-                  className="dashboard-input"
                 />
               </div>
-              <div className="dashboard-form-group">
-                <label>Role:</label>
+              <div className="form-group">
+                <label>Role *</label>
                 <select
                   value={newUser.role}
-                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                  className="dashboard-input"
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                 >
                   <option value="Office User">Office User</option>
                   <option value="Faculty">Faculty</option>
+                  <option value="Admin">Admin</option>
                 </select>
               </div>
+              {message && <p className="modal-message">{message}</p>}
               <div className="dashboard-modal-footer">
-                <button type="submit" className="dashboard-btn dashboard-btn-primary">Create User</button>
-                <button type="button" onClick={() => setShowUserModal(false)} className="dashboard-btn dashboard-btn-secondary">Cancel</button>
+                <button type="submit" className="btn-create-user">Create User</button>
+                <button type="button" onClick={() => setShowUserModal(false)} className="btn-cancel">Cancel</button>
               </div>
             </form>
           </div>
@@ -469,26 +442,26 @@ const Dashboard = ({ user, setUser }) => {
       {/* Change Password Modal */}
       {showPasswordModal && (
         <div className="dashboard-modal-overlay">
-          <div className="dashboard-modal">
+          <div className="dashboard-modal change-password-modal">
             <div className="dashboard-modal-header">
               <h3>Change Password</h3>
               <button onClick={() => setShowPasswordModal(false)} className="dashboard-modal-close">&times;</button>
             </div>
             <form onSubmit={handleUpdatePassword} className="dashboard-modal-body">
-              <div className="dashboard-form-group">
-                <label>New Password:</label>
+              <div className="form-group">
+                <label>New Password *</label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  className="dashboard-input"
                   placeholder="Enter new password"
+                  required
                 />
               </div>
+              {message && <p className="modal-message">{message}</p>}
               <div className="dashboard-modal-footer">
-                <button type="submit" className="dashboard-btn dashboard-btn-primary">Update Password</button>
-                <button type="button" onClick={() => setShowPasswordModal(false)} className="dashboard-btn dashboard-btn-secondary">Cancel</button>
+                <button type="submit" className="btn-update-password">Update Password</button>
+                <button type="button" onClick={() => setShowPasswordModal(false)} className="btn-cancel">Cancel</button>
               </div>
             </form>
           </div>
@@ -497,39 +470,44 @@ const Dashboard = ({ user, setUser }) => {
       
       {showMergeModal && (
         <div className="dashboard-modal-overlay">
-          <div className="dashboard-modal">
+          <div className="dashboard-modal merge-modal">
             <div className="dashboard-modal-header">
-              <h3>Merge {mergeType.toUpperCase()} Files</h3>
-              <button onClick={() => { setShowMergeModal(false); setSelectedDocs([]); }} className="dashboard-modal-close">&times;</button>
+              <h3>Merge Files</h3>
+              <button onClick={() => { setShowMergeModal(false); setSelectedDocs([]); setMergedFileName(''); }} className="dashboard-modal-close">&times;</button>
             </div>
-                        <div className="dashboard-modal-body">
-              <p>Select the files you want to merge (at least 2):</p>
-              <div className="dashboard-modal-selection">
-                {filterDocumentsByType(mergeType).length === 0 ? (
-                  <div className="dashboard-modal-empty">
-                    No {mergeType.toUpperCase()} files found. Please upload some {mergeType} files first.
-                  </div>
-                ) : (
-                  filterDocumentsByType(mergeType).map((doc) => (
-                    <div key={doc.id} className="dashboard-modal-item">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={selectedDocs.includes(doc.id)}
-                          onChange={() => toggleDocSelection(doc.id)}
-                        />
-                        <span className="dashboard-modal-filename">{doc.title}.{doc.file_path.split('.').pop()}</span>
-                      </label>
+            <div className="dashboard-modal-body">
+              <label className="merge-label">Select files to merge:</label>
+              <div className="merge-file-list">
+                {filterDocumentsByType(mergeType).map((doc) => (
+                  <label key={doc.id} className="merge-file-item">
+                    <input
+                      type="checkbox"
+                      checked={selectedDocs.includes(doc.id)}
+                      onChange={() => toggleDocSelection(doc.id)}
+                    />
+                    <div className="merge-file-info">
+                      <p className="merge-file-title">{doc.title}</p>
+                      <p className="merge-file-meta">
+                        {doc.file_path.split('.').pop().toUpperCase()} • {doc.session} • Semester {doc.semester}
+                      </p>
                     </div>
-                  ))
-                )}
+                  </label>
+                ))}
               </div>
+              <label className="merge-label">Merged File Name</label>
+              <input
+                type="text"
+                value={mergedFileName}
+                onChange={(e) => setMergedFileName(e.target.value)}
+                placeholder="Enter name for merged file"
+                className="merge-filename-input"
+              />
             </div>
             <div className="dashboard-modal-footer">
-              <button onClick={handleMergeSubmit} className="dashboard-btn dashboard-btn-primary" disabled={selectedDocs.length < 2 || isLoading}>
-                {isLoading ? 'Merging...' : `Merge ${selectedDocs.length} Selected Files`}
+              <button onClick={handleMergeSubmit} className="btn-merge" disabled={selectedDocs.length < 2 || !mergedFileName || isLoading}>
+                {isLoading ? 'Merging...' : 'Merge Files'}
               </button>
-              <button onClick={() => { setShowMergeModal(false); setSelectedDocs([]); }} className="dashboard-btn dashboard-btn-secondary" disabled={isLoading}>
+              <button onClick={() => { setShowMergeModal(false); setSelectedDocs([]); setMergedFileName(''); }} className="btn-cancel" disabled={isLoading}>
                 Cancel
               </button>
             </div>
