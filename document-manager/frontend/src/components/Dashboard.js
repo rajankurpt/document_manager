@@ -26,10 +26,15 @@ const Dashboard = ({ user, setUser }) => {
   const [newPassword, setNewPassword] = useState('');
   const [mergedFileName, setMergedFileName] = useState('');
 
+  // Report states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportConfig, setReportConfig] = useState({ userId: '', startDate: '', endDate: '' });
+
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSession, setFilterSession] = useState('');
   const [filterSemester, setFilterSemester] = useState('');
+  const [filterUser, setFilterUser] = useState('');
 
   const getDocuments = async () => {
     try {
@@ -57,10 +62,11 @@ const Dashboard = ({ user, setUser }) => {
         : true;
       const sessionMatch = filterSession ? doc.session === filterSession : true;
       const semesterMatch = filterSemester ? String(doc.semester) === filterSemester : true;
-      return searchTermMatch && sessionMatch && semesterMatch;
+      const userMatch = filterUser ? String(doc.user_id) === filterUser : true;
+      return searchTermMatch && sessionMatch && semesterMatch && userMatch;
     });
     setFilteredDocuments(filtered);
-  }, [searchTerm, filterSession, filterSemester, documents]);
+  }, [searchTerm, filterSession, filterSemester, filterUser, documents]);
 
   const getUsers = async () => {
     try {
@@ -68,6 +74,14 @@ const Dashboard = ({ user, setUser }) => {
       const response = await axios.get(`${AUTH_API_URL}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      console.log('Users data from API:', response.data);
+      console.table(response.data.map(u => ({ 
+        id: u.id, 
+        username: u.username, 
+        role: u.role, 
+        is_blocked: u.is_blocked,
+        is_blocked_type: typeof u.is_blocked 
+      })));
       setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -125,6 +139,37 @@ const Dashboard = ({ user, setUser }) => {
       } catch (error) {
         setMessage(error.response?.data?.message || 'Error deleting user.');
       }
+    }
+  };
+
+  const handleBlockUser = async (userId) => {
+    if (window.confirm('Are you sure you want to block this user?')) {
+      try {
+        const token = localStorage.getItem('token');
+        await axios.put(`${AUTH_API_URL}/users/${userId}/block`, {}, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setMessage('User blocked successfully!');
+        getUsers();
+      } catch (error) {
+        setMessage(error.response?.data?.message || 'Error blocking user.');
+      }
+    }
+  };
+
+  const handleUnblockUser = async (userId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.put(`${AUTH_API_URL}/users/${userId}/unblock`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log('Unblock response:', response.data);
+      setMessage('User unblocked successfully!');
+      await getUsers(); // Wait for users to be fetched
+      console.log('Users refreshed after unblock');
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+      setMessage(error.response?.data?.message || 'Error unblocking user.');
     }
   };
 
@@ -260,6 +305,97 @@ const Dashboard = ({ user, setUser }) => {
     }, {});
   };
 
+  const handleDownloadReport = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      
+      console.log('Requesting report with config:', reportConfig);
+      console.log('API URL:', `${API_URL}/report`);
+      
+      const response = await axios.post(
+        `${API_URL}/report`,
+        reportConfig,
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          responseType: 'blob',
+        }
+      );
+      
+      console.log('Report response received:', response);
+      console.log('Response data type:', response.data.type);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      // Check if response is an error (JSON) instead of a blob
+      if (response.data.type === 'application/json') {
+        const text = await response.data.text();
+        const errorData = JSON.parse(text);
+        setMessage(errorData.message || 'Error downloading report.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Create blob and download
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      console.log('Blob created, size:', blob.size);
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `document_report_${Date.now()}.xlsx`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      
+      console.log('Triggering download for:', filename);
+      link.click();
+      
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+      }, 100);
+      
+      setShowReportModal(false);
+      setReportConfig({ userId: '', startDate: '', endDate: '' });
+      setMessage('Report downloaded successfully.');
+    } catch (error) {
+      console.error('Error downloading report - Full error:', error);
+      console.error('Error response:', error.response);
+      
+      if (error.response) {
+        console.error('Error status:', error.response.status);
+        console.error('Error data:', error.response.data);
+        
+        // Try to parse error message from blob
+        if (error.response.data instanceof Blob) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const errorData = JSON.parse(reader.result);
+              console.error('Parsed error:', errorData);
+              setMessage(errorData.message || 'Error downloading report.');
+            } catch (e) {
+              console.error('Could not parse error as JSON:', e);
+              setMessage('Error downloading report. Please check console for details.');
+            }
+          };
+          reader.readAsText(error.response.data);
+        } else {
+          setMessage(error.response.data?.message || 'Error downloading report.');
+        }
+      } else {
+        setMessage(error.message || 'Network error. Please check if the server is running.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleMergeSubmit = async () => {
     if (selectedDocs.length < 2) {
       setMessage('Please select at least 2 files to merge.');
@@ -305,14 +441,17 @@ const Dashboard = ({ user, setUser }) => {
           <p>{user.role} Dashboard</p>
         </div>
         <div className="header-actions">
+          {user.role === 'Admin' && (
+            <button onClick={() => setShowUserModal(true)} className="add-user-btn">+ Add User</button>
+          )}
           <button onClick={handleMergeExcel} className="header-action-btn">Merge Excel</button>
           <button onClick={handleMergePdf} className="header-action-btn">Merge PDF</button>
           {user.role === 'Admin' && (
             <>
-              <button onClick={() => setShowUserModal(true)} className="add-user-btn">+ Add User</button>
               <button onClick={() => setShowUserList(!showUserList)} className="header-action-btn">
                 {showUserList ? 'Hide Users' : 'Show Users'}
               </button>
+              <button onClick={() => setShowReportModal(true)} className="header-action-btn">Get Report</button>
             </>
           )}
           <div className="user-info">
@@ -347,6 +486,12 @@ const Dashboard = ({ user, setUser }) => {
                 <option value="">All Semesters</option>
                 {[...new Set(documents.map(d => d.semester))].map(s => s && <option key={s} value={s}>{s}</option>)}
               </select>
+              {user.role === 'Admin' && (
+                <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
+                  <option value="">All Users</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+                </select>
+              )}
             </div>
           </section>
 
@@ -361,24 +506,40 @@ const Dashboard = ({ user, setUser }) => {
               <button onClick={() => setShowUserList(false)} className="dashboard-modal-close">&times;</button>
             </div>
             <div className="dashboard-modal-body">
-              {users.map(userItem => (
-                <div key={userItem.id} className="user-card">
-                  <div className="user-card-avatar" style={{backgroundColor: userItem.role === 'Admin' ? '#4A90E2' : '#27AE60'}}>
-                    {userItem.username.charAt(0).toUpperCase()}
+              {users.map(userItem => {
+                console.log('User item:', userItem.username, 'is_blocked:', userItem.is_blocked, 'type:', typeof userItem.is_blocked);
+                const isBlocked = userItem.is_blocked === 1 || userItem.is_blocked === true;
+                console.log('isBlocked calculated:', isBlocked);
+                
+                return (
+                  <div key={userItem.id} className="user-card">
+                    <div className="user-card-avatar" style={{backgroundColor: userItem.role === 'Admin' ? '#4A90E2' : '#27AE60'}}>
+                      {userItem.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="user-card-info">
+                      <p className="user-card-name">
+                        {userItem.username}
+                        {isBlocked && <span className="blocked-badge">Blocked</span>}
+                      </p>
+                      <p className="user-card-role-desc">{userItem.role}</p>
+                    </div>
+                    <div className="user-card-actions">
+                      <span className={`user-role-tag ${userItem.role.toLowerCase().replace(' ', '-')}`}>{userItem.role}</span>
+                      <button onClick={() => handleChangePassword(userItem.id)} className="user-edit-btn">Edit</button>
+                      {user.id !== userItem.id && (
+                        <>
+                          {isBlocked ? (
+                            <button onClick={() => handleUnblockUser(userItem.id)} className="user-unblock-btn">Unblock</button>
+                          ) : (
+                            <button onClick={() => handleBlockUser(userItem.id)} className="user-block-btn">Block</button>
+                          )}
+                          <button onClick={() => handleDeleteUser(userItem.id)} className="user-delete-btn">Delete</button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="user-card-info">
-                    <p className="user-card-name">{userItem.username}</p>
-                    <p className="user-card-role-desc">{userItem.role}</p>
-                  </div>
-                  <div className="user-card-actions">
-                    <span className={`user-role-tag ${userItem.role.toLowerCase().replace(' ', '-')}`}>{userItem.role}</span>
-                    <button onClick={() => handleChangePassword(userItem.id)} className="user-edit-btn">Edit</button>
-                    {user.id !== userItem.id && (
-                      <button onClick={() => handleDeleteUser(userItem.id)} className="user-delete-btn">Delete</button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="dashboard-modal-footer">
               <button onClick={() => setShowUserList(false)} className="close-btn">Close</button>
@@ -468,6 +629,52 @@ const Dashboard = ({ user, setUser }) => {
         </div>
       )}
       
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal report-modal">
+            <div className="dashboard-modal-header">
+              <h3>Generate Report</h3>
+              <button onClick={() => setShowReportModal(false)} className="dashboard-modal-close">&times;</button>
+            </div>
+            <div className="dashboard-modal-body">
+              <div className="form-group">
+                <label>Select User</label>
+                <select
+                  value={reportConfig.userId}
+                  onChange={(e) => setReportConfig({ ...reportConfig, userId: e.target.value })}
+                >
+                  <option value="">All Users</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Start Date</label>
+                <input
+                  type="date"
+                  value={reportConfig.startDate}
+                  onChange={(e) => setReportConfig({ ...reportConfig, startDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>End Date</label>
+                <input
+                  type="date"
+                  value={reportConfig.endDate}
+                  onChange={(e) => setReportConfig({ ...reportConfig, endDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="dashboard-modal-footer">
+              <button onClick={handleDownloadReport} className="btn-merge" disabled={isLoading}>
+                {isLoading ? 'Generating...' : 'Download Report'}
+              </button>
+              <button onClick={() => setShowReportModal(false)} className="btn-cancel" disabled={isLoading}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showMergeModal && (
         <div className="dashboard-modal-overlay">
           <div className="dashboard-modal merge-modal">

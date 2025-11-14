@@ -28,7 +28,8 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: 'Username already exists.' });
     }
 
-    const userId = await User.create({ username, password, role });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userId = await User.create({ username, password: hashedPassword, role });
 
     res.status(201).json({ message: 'User created successfully.', userId });
   } catch (error) {
@@ -106,6 +107,55 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
+exports.blockUser = async (req, res) => {
+  // Only admin can block users
+  if (req.user.role !== 'Admin') {
+    return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+  }
+
+  const { id } = req.params;
+
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Prevent admin from blocking themselves
+    if (user.id === req.user.id) {
+      return res.status(400).json({ message: 'Cannot block your own account.' });
+    }
+
+    await User.blockUser(id);
+    res.json({ message: 'User blocked successfully.' });
+  } catch (error) {
+    console.error('Error blocking user:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+exports.unblockUser = async (req, res) => {
+  // Only admin can unblock users
+  if (req.user.role !== 'Admin') {
+    return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+  }
+
+  const { id } = req.params;
+
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    await User.unblockUser(id);
+    res.json({ message: 'User unblocked successfully.' });
+  } catch (error) {
+    console.error('Error unblocking user:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
 exports.login = async (req, res) => {
   const { username, password } = req.body;
 
@@ -117,6 +167,11 @@ exports.login = async (req, res) => {
     const user = await User.findByUsername(username);
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials.' });
+    }
+
+    // Check if user is blocked
+    if (user.is_blocked) {
+      return res.status(403).json({ message: 'Your account has been blocked. Please contact the administrator.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

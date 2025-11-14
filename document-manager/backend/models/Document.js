@@ -124,6 +124,39 @@ const Document = {
       const [result] = await pool.query('DELETE FROM documents WHERE id = ? AND user_id = ?', [id, user.id]);
       return result.affectedRows > 0;
     }
+  },
+
+  async findByFilters({ userId, startDate, endDate }) {
+    let query = `
+      SELECT d.*, 
+             COALESCE(u.username, 'Unknown User') as username
+      FROM documents d 
+      LEFT JOIN users u ON d.user_id = u.id 
+      WHERE 1=1
+    `;
+    const params = [];
+
+    // Filter by user if specified
+    if (userId && userId !== '') {
+      query += ' AND d.user_id = ?';
+      params.push(userId);
+    }
+
+    // Filter by date range if specified
+    if (startDate) {
+      query += ' AND DATE(d.created_at) >= ?';
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      query += ' AND DATE(d.created_at) <= ?';
+      params.push(endDate);
+    }
+
+    query += ' ORDER BY d.created_at DESC';
+
+    const [rows] = await pool.query(query, params);
+    return rows;
   }
 };
 

@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret'; // Should be in .env
 
-const protect = (req, res, next) => {
+const authMiddleware = (req, res, next) => {
   let token;
 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
@@ -30,4 +30,4 @@ const protect = (req, res, next) => {
   }
 };
 
-module.exports = protect;
+module.exports = authMiddleware;

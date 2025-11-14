@@ -328,7 +328,7 @@ body, .dashboard-bg {
     background-color: #fef5e7;
 }
 
-.user-edit-btn, .user-delete-btn {
+.user-edit-btn, .user-delete-btn, .user-block-btn, .user-unblock-btn {
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 8px;
@@ -341,9 +341,30 @@ body, .dashboard-bg {
   color: white;
 }
 
+.user-block-btn {
+  background: #E67E22;
+  color: white;
+}
+
+.user-unblock-btn {
+  background: #27AE60;
+  color: white;
+}
+
 .user-delete-btn {
   background: var(--red);
   color: white;
+}
+
+.blocked-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.2rem 0.6rem;
+  background-color: #E74C3C;
+  color: white;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .close-btn {
@@ -493,4 +514,132 @@ body, .dashboard-bg {
   border: none;
   background-color: #e67e22;
   color: white;
+  margin-right: 0.5rem;
+}
+
+.btn-merge:disabled, .btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* === Report Modal === */
+.report-modal {
+  max-width: 500px;
+}
+
+.report-modal .dashboard-modal-body {
+  padding: 1.5rem;
+}
+
+.report-modal .form-group {
+  margin-bottom: 1.5rem;
+}
+
+.report-modal .form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.report-modal .form-group select,
+.report-modal .form-group input[type="date"] {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.report-modal .dashboard-modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* === Column Selector Styles === */
+.column-selector {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  background-color: var(--background-light);
+  margin-bottom: 1rem;
+}
+
+.column-selector label {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.column-selector-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.column-action-btn {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.column-action-btn:hover {
+  background: var(--primary-blue);
+  color: white;
+  border-color: var(--primary-blue);
+}
+
+.selected-count {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-left: auto;
+}
+
+.column-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: var(--card-bg);
+  border-radius: 6px;
+}
+
+.column-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  font-weight: normal;
+  margin-bottom: 0;
+}
+
+.column-item:hover {
+  background: var(--background-light);
+}
+
+.column-item input[type="checkbox"] {
+  cursor: pointer;
+  width: auto;
+  margin: 0;
+}
+
+.column-item span {
+  font-size: 0.9rem;
+  color: var(--text-dark);
 }

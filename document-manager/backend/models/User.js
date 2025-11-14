@@ -27,7 +27,7 @@ const User = {
   },
 
   async findAll() {
-    const [rows] = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT id, username, role, is_blocked, created_at FROM users ORDER BY created_at DESC');
     return rows;
   },
 
@@ -38,6 +38,14 @@ const User = {
 
   async delete(id) {
     await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  },
+
+  async blockUser(id) {
+    await pool.query('UPDATE users SET is_blocked = TRUE WHERE id = ?', [id]);
+  },
+
+  async unblockUser(id) {
+    await pool.query('UPDATE users SET is_blocked = FALSE WHERE id = ?', [id]);
   },
 
   async createAdminIfNotExists() {

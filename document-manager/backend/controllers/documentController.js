@@ -195,3 +195,74 @@ exports.deleteDocument = async (req, res) => {
     res.status(500).json({ message: 'Error deleting document' });
   }
 };
+
+exports.generateReport = async (req, res) => {
+  try {
+    // Only admin can generate reports
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+    }
+
+    const { userId, startDate, endDate } = req.body;
+
+    console.log('Report request received:', { userId, startDate, endDate });
+
+    // Get documents based on filters
+    const documents = await Doc.findByFilters({ userId, startDate, endDate });
+
+    console.log('Documents found:', documents.length);
+
+    if (!documents || documents.length === 0) {
+      return res.status(404).json({ message: 'No documents found for the selected criteria.' });
+    }
+
+    // Generate Excel report
+    const XLSX = require('xlsx');
+    
+    // Prepare data for Excel
+    const reportData = documents.map(doc => ({
+      'Document ID': doc.id,
+      'Title': doc.title,
+      'Description': doc.description || 'N/A',
+      'Session': doc.session || 'N/A',
+      'Semester': doc.semester || 'N/A',
+      'Uploaded By': doc.username || 'Unknown',
+      'Upload Date': new Date(doc.created_at).toLocaleDateString('en-US'),
+      'File Type': path.extname(doc.file_path).toUpperCase().replace('.', '')
+    }));
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(reportData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 }, // Document ID
+      { wch: 30 }, // Title
+      { wch: 40 }, // Description
+      { wch: 15 }, // Session
+      { wch: 15 }, // Semester
+      { wch: 20 }, // Uploaded By
+      { wch: 15 }, // Upload Date
+      { wch: 12 }  // File Type
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Document Report');
+
+    // Generate buffer
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set headers for download
+    const filename = `document_report_${Date.now()}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    
+    console.log('Sending report file:', filename, 'Size:', buffer.length);
+    
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error generating report:', error);
+    res.status(500).json({ message: 'Error generating report: ' + error.message });
+  }
+};

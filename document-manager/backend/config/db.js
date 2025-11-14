@@ -64,6 +64,17 @@ const initDb = async () => {
       console.log('documents table updated with semester.');
     }
 
+    // Add is_blocked column to users table if it doesn't exist
+    const [blockedRows] = await connection.query(`
+      SHOW COLUMNS FROM users LIKE 'is_blocked';
+    `);
+    if (blockedRows.length === 0) {
+      await connection.query(`
+        ALTER TABLE users ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE;
+      `);
+      console.log('users table updated with is_blocked column.');
+    }
+
     connection.release();
   } catch (error) {
     console.error('Error initializing database:', error);

@@ -42,6 +42,7 @@ router.get('/', ctrl.list);
 router.get('/:id/download', ctrl.download);
 router.post('/merge/excel', ctrl.mergeExcel);
 router.post('/merge/pdf', ctrl.mergePdf);
+router.post('/report', ctrl.generateReport);
 router.delete('/:id', ctrl.deleteDocument);
 
 module.exports = router;
