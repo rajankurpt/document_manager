@@ -5,6 +5,7 @@ const path = require('path');
 const { initDb } = require('./config/db');
 const docRoutes = require('./routes/documentRoutes');
 const authRoutes = require('./routes/authRoutes');
+const assignmentRoutes = require('./routes/assignmentRoutes');
 
 // Initialize Database
 initDb();
@@ -23,6 +24,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/', (_req, res) => res.send('Document Manager API '));   // simple health check
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', docRoutes);
+app.use('/api/assignments', assignmentRoutes);
 
 const PORT = process.env.PORT || 5005;
 

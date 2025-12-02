@@ -75,6 +75,50 @@ const initDb = async () => {
       console.log('users table updated with is_blocked column.');
     }
 
+    // Create assignments table if it doesn't exist
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS assignments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        due_at DATETIME NULL,
+        created_by INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      );
+    `);
+    console.log('Assignments table is ready.');
+
+    // Create assignment_users table if it doesn't exist
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS assignment_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        assignment_id INT NOT NULL,
+        user_id INT NOT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status ENUM('pending', 'submitted', 'late') DEFAULT 'pending',
+        submitted_at DATETIME NULL,
+        FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY assignment_user_unique (assignment_id, user_id)
+      );
+    `);
+    console.log('Assignment_users table is ready.');
+
+    // Add assignment_id column to documents table if it doesn't exist
+    const [assignmentIdRows] = await connection.query(`
+      SHOW COLUMNS FROM documents LIKE 'assignment_id';
+    `);
+    if (assignmentIdRows.length === 0) {
+      await connection.query(`
+        ALTER TABLE documents
+        ADD COLUMN assignment_id INT NULL,
+        ADD CONSTRAINT fk_documents_assignment_id
+          FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE SET NULL;
+      `);
+      console.log('documents table updated with assignment_id.');
+    }
+
     connection.release();
   } catch (error) {
     console.error('Error initializing database:', error);

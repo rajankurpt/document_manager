@@ -1,12 +1,12 @@
 const { pool } = require('../config/db');
 
 const Document = {
-  async create({ title, description, filePath, userId, session, semester }) {
+  async create({ title, description, filePath, userId, session, semester, assignmentId = null }) {
     const [result] = await pool.query(
-      'INSERT INTO documents (title, description, file_path, user_id, session, semester) VALUES (?, ?, ?, ?, ?, ?)',
-      [title, description, filePath, userId, session, semester]
+      'INSERT INTO documents (title, description, file_path, user_id, session, semester, assignment_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [title, description, filePath, userId, session, semester, assignmentId]
     );
-    return { id: result.insertId, title, description, file_path: filePath, user_id: userId, session, semester };
+    return { id: result.insertId, title, description, file_path: filePath, user_id: userId, session, semester, assignment_id: assignmentId };
   },
 
   async findAll(user) {

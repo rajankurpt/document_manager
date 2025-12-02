@@ -1,19 +1,54 @@
 const path = require('path');
 const fs = require('fs');
 const Doc = require('../models/Document');
+const Assignment = require('../models/Assignment');
 const { mergeExcelFiles, mergePdfFiles } = require('../services/mergeService');
 
 exports.upload = async (req, res) => {
-  const { title, description, session, semester } = req.body;
+  const { title, description, session, semester, assignmentId } = req.body;
   const filePath = req.file.path;
-  const userId = req.user.id; // From authMiddleware
+  const userId = req.user.id;
 
   if (!title || !filePath) {
     return res.status(400).json({ message: 'Title and file are required.' });
   }
 
   try {
-    const doc = await Doc.create({ title, description, filePath, userId, session, semester });
+    let parsedAssignmentId = null;
+    if (assignmentId && assignmentId !== '') {
+      const tmp = parseInt(assignmentId, 10);
+      if (!Number.isNaN(tmp)) {
+        parsedAssignmentId = tmp;
+      }
+    }
+
+    const doc = await Doc.create({
+      title,
+      description,
+      filePath,
+      userId,
+      session,
+      semester,
+      assignmentId: parsedAssignmentId,
+    });
+
+    if (parsedAssignmentId) {
+      const assignment = await Assignment.findById(parsedAssignmentId);
+      if (assignment) {
+        let isLate = false;
+        if (assignment.due_at) {
+          const now = new Date();
+          const dueAt = new Date(assignment.due_at);
+          isLate = now > dueAt;
+        }
+        await Assignment.markSubmitted({
+          assignmentId: parsedAssignmentId,
+          userId,
+          isLate,
+        });
+      }
+    }
+
     res.status(201).json({ message: 'Document uploaded successfully.', document: doc });
   } catch (error) {
     console.error('Error uploading document:', error);

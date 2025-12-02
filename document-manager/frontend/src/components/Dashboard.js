@@ -6,6 +6,7 @@ import './Dashboard.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5005/api/documents';
 const AUTH_API_URL = process.env.REACT_APP_AUTH_API_URL || 'http://localhost:5005/api/auth';
+const ASSIGN_API_URL = process.env.REACT_APP_ASSIGN_API_URL || 'http://localhost:5005/api/assignments';
 
 const Dashboard = ({ user, setUser }) => {
   const [documents, setDocuments] = useState([]);
@@ -30,11 +31,30 @@ const Dashboard = ({ user, setUser }) => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportConfig, setReportConfig] = useState({ userId: '', startDate: '', endDate: '' });
 
+  // Assignment / task states
+  const [assignments, setAssignments] = useState([]);
+  const [myAssignments, setMyAssignments] = useState([]);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [newAssignment, setNewAssignment] = useState({ title: '', description: '', dueAt: '' });
+  const [selectedAssignmentUserIds, setSelectedAssignmentUserIds] = useState([]);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [assignmentUsers, setAssignmentUsers] = useState([]);
+  const [showAssignmentDetailModal, setShowAssignmentDetailModal] = useState(false);
+  const [showAssignmentSubmitModal, setShowAssignmentSubmitModal] = useState(false);
+  const [activeAssignmentForUpload, setActiveAssignmentForUpload] = useState(null);
+
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSession, setFilterSession] = useState('');
   const [filterSemester, setFilterSemester] = useState('');
   const [filterUser, setFilterUser] = useState('');
+
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
 
   const getDocuments = async () => {
     try {
@@ -52,6 +72,9 @@ const Dashboard = ({ user, setUser }) => {
     getDocuments();
     if (user.role === 'Admin') {
       getUsers();
+      getAssignments();
+    } else {
+      getMyAssignments();
     }
   }, [user.role]);
 
@@ -86,6 +109,97 @@ const Dashboard = ({ user, setUser }) => {
     } catch (error) {
       console.error('Error fetching users:', error);
     }
+  };
+
+  const getAssignments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(ASSIGN_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAssignments(response.data);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    }
+  };
+
+  const getMyAssignments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${ASSIGN_API_URL}/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setMyAssignments(response.data);
+    } catch (error) {
+      console.error('Error fetching my assignments:', error);
+    }
+  };
+
+  const toggleAssignmentUser = (userId) => {
+    setSelectedAssignmentUserIds(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleCreateAssignmentSubmit = async (e) => {
+    e.preventDefault();
+    if (!newAssignment.title || selectedAssignmentUserIds.length === 0) {
+      setMessage('Please provide a title and select at least one user.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const dueAtPayload = newAssignment.dueAt
+        ? new Date(newAssignment.dueAt).toISOString().slice(0, 19).replace('T', ' ')
+        : null;
+
+      await axios.post(ASSIGN_API_URL, {
+        title: newAssignment.title,
+        description: newAssignment.description,
+        dueAt: dueAtPayload,
+        userIds: selectedAssignmentUserIds,
+      }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setMessage('Assignment created successfully.');
+      setNewAssignment({ title: '', description: '', dueAt: '' });
+      setSelectedAssignmentUserIds([]);
+      setShowAssignmentModal(false);
+      getAssignments();
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Error creating assignment.');
+    }
+  };
+
+  const openAssignmentDetail = async (assignment) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${ASSIGN_API_URL}/${assignment.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSelectedAssignment(response.data.assignment);
+      setAssignmentUsers(response.data.users || []);
+      setShowAssignmentDetailModal(true);
+    } catch (error) {
+      console.error('Error fetching assignment detail:', error);
+    }
+  };
+
+  const openAssignmentSubmit = (assignment) => {
+    setActiveAssignmentForUpload(assignment);
+    setShowAssignmentSubmitModal(true);
+  };
+
+  const handleAssignmentUploadComplete = () => {
+    setShowAssignmentSubmitModal(false);
+    setActiveAssignmentForUpload(null);
+    getDocuments();
+    getMyAssignments();
+    setMessage('Assignment document submitted successfully.');
   };
 
   const handleCreateUser = async (e) => {
@@ -494,6 +608,113 @@ const Dashboard = ({ user, setUser }) => {
               )}
             </div>
           </section>
+          {user.role === 'Admin' && (
+            <section className="dashboard-card assignments-card">
+              <div className="assignments-header">
+                <h2>Tasks / Requests</h2>
+                <button
+                  type="button"
+                  className="header-action-btn"
+                  onClick={() => setShowAssignmentModal(true)}
+                >
+                  New Task
+                </button>
+              </div>
+              {assignments.length === 0 ? (
+                <p>No tasks created yet.</p>
+              ) : (
+                <div className="assignment-list">
+                  {assignments.map(a => (
+                    <div key={a.id} className="assignment-row">
+                      <div className="assignment-main">
+                        <div className="assignment-title">{a.title}</div>
+                        {a.description && (
+                          <div className="assignment-description">
+                            {a.description}
+                          </div>
+                        )}
+                        <div className="assignment-meta">
+                          <span>
+                            Due: {a.due_at ? formatDateTime(a.due_at) : 'No deadline'}
+                          </span>
+                          <span>Created at: {formatDateTime(a.created_at)}</span>
+                        </div>
+                      </div>
+                      <div className="assignment-actions">
+                        <div className="assignment-counts">
+                          <span>Assigned: {a.assigned_count || 0}</span>
+                          <span>Submitted: {a.submitted_count || 0}</span>
+                          <span>Late: {a.late_count || 0}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="assignment-view-btn"
+                          onClick={() => openAssignmentDetail(a)}
+                        >
+                          View details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {user.role !== 'Admin' && (
+            <section className="dashboard-card my-assignments-card">
+              <div className="assignments-header">
+                <h2>My Tasks</h2>
+              </div>
+              {myAssignments.length === 0 ? (
+                <p>No tasks assigned to you.</p>
+              ) : (
+                <div className="assignment-list">
+                  {myAssignments.map(a => (
+                    <div key={a.id} className="assignment-row">
+                      <div className="assignment-main">
+                        <div className="assignment-title">{a.title}</div>
+                        {a.description && (
+                          <div className="assignment-description">
+                            {a.description}
+                          </div>
+                        )}
+                        <div className="assignment-meta">
+                          <span>
+                            Due: {a.due_at ? formatDateTime(a.due_at) : 'No deadline'}
+                          </span>
+                          {a.submitted_at && (
+                            <span>Submitted: {formatDateTime(a.submitted_at)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="assignment-actions">
+                        <span
+                          className={
+                            'assignment-status-pill ' +
+                            (a.status === 'submitted'
+                              ? 'assignment-status-submitted'
+                              : a.status === 'late'
+                              ? 'assignment-status-late'
+                              : 'assignment-status-pending')
+                          }
+                        >
+                          {a.status || 'pending'}
+                        </span>
+                        <button
+                          type="button"
+                          className="assignment-submit-btn"
+                          onClick={() => openAssignmentSubmit(a)}
+                        >
+                          {a.status === 'pending' ? 'Submit' : 'Submit more'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <DocumentList documents={filteredDocuments} user={user} groupDocumentsByUser={groupDocumentsByUser} handleDownload={handleDownload} handleDelete={handleDelete} />
           
@@ -670,6 +891,170 @@ const Dashboard = ({ user, setUser }) => {
                 {isLoading ? 'Generating...' : 'Download Report'}
               </button>
               <button onClick={() => setShowReportModal(false)} className="btn-cancel" disabled={isLoading}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {user.role === 'Admin' && showAssignmentModal && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal assignment-modal">
+            <div className="dashboard-modal-header">
+              <h3>Create Task / Request</h3>
+              <button onClick={() => setShowAssignmentModal(false)} className="dashboard-modal-close">&times;</button>
+            </div>
+            <form onSubmit={handleCreateAssignmentSubmit} className="dashboard-modal-body">
+              <div className="form-group">
+                <label>Title *</label>
+                <input
+                  type="text"
+                  value={newAssignment.title}
+                  onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={newAssignment.description}
+                  onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Due Date &amp; Time</label>
+                <input
+                  type="datetime-local"
+                  value={newAssignment.dueAt}
+                  onChange={(e) => setNewAssignment({ ...newAssignment, dueAt: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Select Users</label>
+                <div className="assignment-user-groups">
+                  <div className="assignment-user-group">
+                    <div className="assignment-user-group-title">Faculty</div>
+                    <div className="assignment-user-list">
+                      {users
+                        .filter(u => u.role === 'Faculty')
+                        .map(u => (
+                          <label key={u.id} className="assignment-user-item">
+                            <input
+                              type="checkbox"
+                              checked={selectedAssignmentUserIds.includes(u.id)}
+                              onChange={() => toggleAssignmentUser(u.id)}
+                            />
+                            <span>{u.username}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="assignment-user-group">
+                    <div className="assignment-user-group-title">Office</div>
+                    <div className="assignment-user-list">
+                      {users
+                        .filter(u => u.role === 'Office User')
+                        .map(u => (
+                          <label key={u.id} className="assignment-user-item">
+                            <input
+                              type="checkbox"
+                              checked={selectedAssignmentUserIds.includes(u.id)}
+                              onChange={() => toggleAssignmentUser(u.id)}
+                            />
+                            <span>{u.username}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="dashboard-modal-footer">
+                <button type="submit" className="btn-create-user">Create Task</button>
+                <button type="button" onClick={() => setShowAssignmentModal(false)} className="btn-cancel">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {user.role === 'Admin' && showAssignmentDetailModal && selectedAssignment && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal assignment-detail-modal">
+            <div className="dashboard-modal-header">
+              <h3>Task Details</h3>
+              <button onClick={() => setShowAssignmentDetailModal(false)} className="dashboard-modal-close">&times;</button>
+            </div>
+            <div className="dashboard-modal-body">
+              <h4 className="assignment-title">{selectedAssignment.title}</h4>
+              {selectedAssignment.description && (
+                <p className="assignment-description">{selectedAssignment.description}</p>
+              )}
+              <div className="assignment-meta">
+                <span>
+                  Due: {selectedAssignment.due_at ? formatDateTime(selectedAssignment.due_at) : 'No deadline'}
+                </span>
+                <span>Created at: {formatDateTime(selectedAssignment.created_at)}</span>
+              </div>
+              <div className="assignment-user-table">
+                {assignmentUsers.length === 0 ? (
+                  <p>No users assigned.</p>
+                ) : (
+                  assignmentUsers.map(u => (
+                    <div key={u.id} className="assignment-user-row">
+                      <div className="assignment-user-main">
+                        <span className="assignment-user-name">{u.username}</span>
+                        <span className="assignment-user-role">{u.role}</span>
+                      </div>
+                      <div className="assignment-user-meta">
+                        <span
+                          className={
+                            'assignment-status-pill ' +
+                            (u.status === 'submitted'
+                              ? 'assignment-status-submitted'
+                              : u.status === 'late'
+                              ? 'assignment-status-late'
+                              : 'assignment-status-pending')
+                          }
+                        >
+                          {u.status || 'pending'}
+                        </span>
+                        {u.submitted_at && (
+                          <span className="assignment-user-submitted">Submitted: {formatDateTime(u.submitted_at)}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="dashboard-modal-footer">
+              <button type="button" onClick={() => setShowAssignmentDetailModal(false)} className="btn-cancel">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAssignmentSubmitModal && activeAssignmentForUpload && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal assignment-submit-modal">
+            <div className="dashboard-modal-header">
+              <h3>Submit Documents for Task</h3>
+              <button onClick={() => setShowAssignmentSubmitModal(false)} className="dashboard-modal-close">&times;</button>
+            </div>
+            <div className="dashboard-modal-body">
+              <h4 className="assignment-title">{activeAssignmentForUpload.title}</h4>
+              {activeAssignmentForUpload.description && (
+                <p className="assignment-description">{activeAssignmentForUpload.description}</p>
+              )}
+              <div className="assignment-meta">
+                <span>
+                  Due: {activeAssignmentForUpload.due_at ? formatDateTime(activeAssignmentForUpload.due_at) : 'No deadline'}
+                </span>
+              </div>
+              <div className="assignment-upload-wrapper">
+                <DocumentUpload
+                  onUpload={handleAssignmentUploadComplete}
+                  assignmentId={activeAssignmentForUpload.id}
+                />
+              </div>
             </div>
           </div>
         </div>

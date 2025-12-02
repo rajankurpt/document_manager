@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 
-const DocumentUpload = ({ onUpload }) => {
+const DocumentUpload = ({ onUpload, assignmentId = null }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState(null);
@@ -72,8 +72,12 @@ const DocumentUpload = ({ onUpload }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !title || !session || !semester) {
-      setMessage('Please fill in all required fields.');
+    if (!file || !title || (!assignmentId && (!session || !semester))) {
+      setMessage(
+        assignmentId
+          ? 'Please select a file and provide a title.'
+          : 'Please fill in all required fields.'
+      );
       return;
     }
 
@@ -112,6 +116,9 @@ const DocumentUpload = ({ onUpload }) => {
     formData.append('description', description);
     formData.append('session', session);
     formData.append('semester', semester);
+    if (assignmentId) {
+      formData.append('assignmentId', assignmentId);
+    }
 
     try {
       const token = localStorage.getItem('token');
@@ -145,7 +152,7 @@ const DocumentUpload = ({ onUpload }) => {
     <div className="upload-form">
       <div className="upload-header">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <h3>Upload Document</h3>
+        <h3>{assignmentId ? 'Submit Task Document' : 'Upload Document'}</h3>
       </div>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
@@ -157,15 +164,15 @@ const DocumentUpload = ({ onUpload }) => {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional notes about the document"></textarea>
         </div>
         <div className="form-group">
-          <label>Session *</label>
-          <select value={session} onChange={(e) => setSession(e.target.value)} required>
+          <label>Session {assignmentId ? '(optional)' : '*'}</label>
+          <select value={session} onChange={(e) => setSession(e.target.value)} required={!assignmentId}>
             <option value="">Select Session</option>
             {generateSessions().map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="form-group">
-          <label>Semester *</label>
-          <select value={semester} onChange={(e) => setSemester(e.target.value)} required>
+          <label>Semester {assignmentId ? '(optional)' : '*'}</label>
+          <select value={semester} onChange={(e) => setSemester(e.target.value)} required={!assignmentId}>
             <option value="">Select Semester</option>
             {[1, 2, 3, 4].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -198,7 +205,7 @@ const DocumentUpload = ({ onUpload }) => {
         )}
         <button type="submit" className="upload-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload Document
+          {assignmentId ? 'Submit Document' : 'Upload Document'}
         </button>
       </form>
       {message && <p className="upload-message">{message}</p>}
