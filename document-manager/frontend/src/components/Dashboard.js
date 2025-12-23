@@ -43,6 +43,8 @@ const Dashboard = ({ user, setUser }) => {
   const [showAssignmentSubmitModal, setShowAssignmentSubmitModal] = useState(false);
   const [activeAssignmentForUpload, setActiveAssignmentForUpload] = useState(null);
 
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSession, setFilterSession] = useState('');
@@ -200,6 +202,12 @@ const Dashboard = ({ user, setUser }) => {
     getDocuments();
     getMyAssignments();
     setMessage('Assignment document submitted successfully.');
+  };
+
+  const handleMainUploadComplete = () => {
+    setShowUploadModal(false);
+    getDocuments();
+    setMessage('Document uploaded successfully.');
   };
 
   const handleCreateUser = async (e) => {
@@ -578,7 +586,22 @@ const Dashboard = ({ user, setUser }) => {
       <main className="dashboard-main">
         <div className="dashboard-sidebar">
           <section className="dashboard-card upload-card">
-            <DocumentUpload onUpload={getDocuments} />
+            <div className="upload-card-content">
+              <div className="upload-card-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <div>
+                <h2 className="upload-card-title">Upload Documents</h2>
+                <p className="upload-card-description">Store exam timetables, circulars and reports in one secure place.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="upload-open-btn"
+              onClick={() => setShowUploadModal(true)}
+            >
+              Upload Document
+            </button>
             {message && <div className={`dashboard-alert ${message.toLowerCase().includes('error') ? 'dashboard-alert-error' : 'dashboard-alert-success'}`}>{message}</div>}
           </section>
         </div>
@@ -764,6 +787,19 @@ const Dashboard = ({ user, setUser }) => {
             </div>
             <div className="dashboard-modal-footer">
               <button onClick={() => setShowUserList(false)} className="close-btn">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showUploadModal && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal upload-modal">
+            <div className="dashboard-modal-header">
+              <h3>Upload Document</h3>
+              <button onClick={() => setShowUploadModal(false)} className="dashboard-modal-close">&times;</button>
+            </div>
+            <div className="dashboard-modal-body">
+              <DocumentUpload onUpload={handleMainUploadComplete} showHeader={false} />
             </div>
           </div>
         </div>
@@ -1053,6 +1089,7 @@ const Dashboard = ({ user, setUser }) => {
                 <DocumentUpload
                   onUpload={handleAssignmentUploadComplete}
                   assignmentId={activeAssignmentForUpload.id}
+                  showHeader={false}
                 />
               </div>
             </div>

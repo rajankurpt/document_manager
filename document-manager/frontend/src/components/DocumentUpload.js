@@ -2,12 +2,64 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 
-const DocumentUpload = ({ onUpload, assignmentId = null }) => {
+const SUBJECTS_BY_SEMESTER = {
+  1: [
+    'Mathematical Foundations for Computer Applications',
+    'Database Management Systems',
+    'Web Technologies',
+    'Python Programming',
+    'Linux and Shell Programming',
+    'English Course',
+    'Research Methodology and IPR (Online)',
+    'Mathematics for MCA Students',
+  ],
+  2: [
+    'Data Structures',
+    'Artificial Intelligence and Machine Learning',
+    'Computer Networks',
+    'Java Programming',
+    'Software Project Management',
+    'Physical Activity',
+    'Augmented Reality',
+    'Big Data Analytics',
+    'Advanced Web Programming',
+    '.Net Programming',
+    'Deep Learning',
+  ],
+  3: [
+    'Design and Analysis of Algorithms',
+    'Cloud Computing',
+    'Agile Methodologies',
+    'Software Testing and Practices',
+    'Design Thinking',
+    'Mini Project',
+    'Advanced Topics in AI',
+    'Cyber Security',
+    'DevOps',
+    'UI/UX',
+    'Web of Things',
+    'Introduction to Block Chain Technologies',
+    'Robotics',
+    'Soft Computing',
+    'Advanced Java Programming',
+    'Mobile Application Development',
+    'Co-curricular Activities',
+  ],
+  4: [
+    'Major Project',
+    'Research Seminar',
+    '(Online Courses) 12 Weeks Duration (online.vtu.ac.in)',
+    'Societal Activity',
+  ],
+};
+
+const DocumentUpload = ({ onUpload, assignmentId = null, showHeader = true }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState(null);
   const [session, setSession] = useState('');
   const [semester, setSemester] = useState('');
+  const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [columns, setColumns] = useState([]);
   const [selectedColumns, setSelectedColumns] = useState([]);
@@ -72,7 +124,7 @@ const DocumentUpload = ({ onUpload, assignmentId = null }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !title || (!assignmentId && (!session || !semester))) {
+    if (!file || !title || (!assignmentId && (!session || !semester || !subject))) {
       setMessage(
         assignmentId
           ? 'Please select a file and provide a title.'
@@ -116,6 +168,7 @@ const DocumentUpload = ({ onUpload, assignmentId = null }) => {
     formData.append('description', description);
     formData.append('session', session);
     formData.append('semester', semester);
+    formData.append('subject', subject);
     if (assignmentId) {
       formData.append('assignmentId', assignmentId);
     }
@@ -138,6 +191,7 @@ const DocumentUpload = ({ onUpload, assignmentId = null }) => {
       setFile(null);
       setSession('');
       setSemester('');
+      setSubject('');
       setColumns([]);
       setSelectedColumns([]);
       setShowColumnSelector(false);
@@ -150,10 +204,12 @@ const DocumentUpload = ({ onUpload, assignmentId = null }) => {
 
   return (
     <div className="upload-form">
-      <div className="upload-header">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <h3>{assignmentId ? 'Submit Task Document' : 'Upload Document'}</h3>
-      </div>
+      {showHeader && (
+        <div className="upload-header">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <h3>{assignmentId ? 'Submit Task Document' : 'Upload Document'}</h3>
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label>Title *</label>
@@ -175,6 +231,20 @@ const DocumentUpload = ({ onUpload, assignmentId = null }) => {
           <select value={semester} onChange={(e) => setSemester(e.target.value)} required={!assignmentId}>
             <option value="">Select Semester</option>
             {[1, 2, 3, 4].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Subject {assignmentId ? '(optional)' : '*'}</label>
+          <select
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            required={!assignmentId}
+            disabled={!semester || !SUBJECTS_BY_SEMESTER[semester]}
+          >
+            <option value="">Select Subject</option>
+            {(SUBJECTS_BY_SEMESTER[semester] || []).map((subj) => (
+              <option key={subj} value={subj}>{subj}</option>
+            ))}
           </select>
         </div>
         <div className="form-group">

@@ -5,15 +5,48 @@ const Assignment = require('../models/Assignment');
 const { mergeExcelFiles, mergePdfFiles } = require('../services/mergeService');
 
 exports.upload = async (req, res) => {
-  const { title, description, session, semester, assignmentId } = req.body;
-  const filePath = req.file.path;
+  const { title, description, session, semester, assignmentId, subject } = req.body;
+  let filePath = req.file.path;
   const userId = req.user.id;
 
   if (!title || !filePath) {
     return res.status(400).json({ message: 'Title and file are required.' });
   }
 
+  const makeSlug = (value, fallback) => {
+    const base = (value && String(value).trim()) || fallback;
+    return base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || fallback;
+  };
+
   try {
+    let baseNameForTitle = null;
+    try {
+      const ext = path.extname(filePath);
+      const dir = path.dirname(filePath);
+      const subjectSlug = makeSlug(subject, 'subject');
+      const typeSlug = makeSlug(title, 'document');
+      const date = new Date();
+      const datePart = date.toISOString().slice(0, 10);
+
+      let baseName = `${subjectSlug}_${typeSlug}_${datePart}`;
+      let targetPath = path.join(dir, `${baseName}${ext}`);
+      let counter = 1;
+
+      while (fs.existsSync(targetPath)) {
+        baseName = `${subjectSlug}_${typeSlug}_${datePart}_${counter}`;
+        targetPath = path.join(dir, `${baseName}${ext}`);
+        counter += 1;
+      }
+
+      fs.renameSync(filePath, targetPath);
+      filePath = targetPath;
+      baseNameForTitle = baseName;
+    } catch (renameError) {
+      console.error('Error applying naming convention, keeping original path:', renameError);
+    }
     let parsedAssignmentId = null;
     if (assignmentId && assignmentId !== '') {
       const tmp = parseInt(assignmentId, 10);
@@ -22,8 +55,10 @@ exports.upload = async (req, res) => {
       }
     }
 
+    const storedTitle = baseNameForTitle || title;
+
     const doc = await Doc.create({
-      title,
+      title: storedTitle,
       description,
       filePath,
       userId,
