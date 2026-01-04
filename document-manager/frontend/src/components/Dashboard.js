@@ -45,17 +45,73 @@ const Dashboard = ({ user, setUser }) => {
 
   const [showUploadModal, setShowUploadModal] = useState(false);
 
+  const [activeSection, setActiveSection] = useState('files');
+
+  const [adminFilesView, setAdminFilesView] = useState('folders');
+  const [adminSelectedFolderLabel, setAdminSelectedFolderLabel] = useState('');
+
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSession, setFilterSession] = useState('');
   const [filterSemester, setFilterSemester] = useState('');
   const [filterUser, setFilterUser] = useState('');
 
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewMime, setPreviewMime] = useState('');
+  const [previewTitle, setPreviewTitle] = useState('');
+  const [previewError, setPreviewError] = useState('');
+
+  const documentCountsByUserId = documents.reduce((acc, doc) => {
+    const key = String(doc.user_id);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
   const formatDateTime = (value) => {
     if (!value) return '';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleString();
+  };
+
+  const closePreviewModal = () => {
+    setShowPreviewModal(false);
+    setPreviewError('');
+    setPreviewMime('');
+    setPreviewTitle('');
+    if (previewUrl) {
+      window.URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl('');
+  };
+
+  const handlePreview = async (doc) => {
+    try {
+      setPreviewError('');
+      setPreviewTitle(doc?.title || 'Preview');
+      if (previewUrl) {
+        window.URL.revokeObjectURL(previewUrl);
+        setPreviewUrl('');
+      }
+
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/${doc.id}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+      });
+
+      const contentType = response.headers['content-type'] || '';
+      setPreviewMime(contentType);
+
+      const blob = new Blob([response.data], { type: contentType });
+      const url = window.URL.createObjectURL(blob);
+      setPreviewUrl(url);
+      setShowPreviewModal(true);
+    } catch (error) {
+      setPreviewError('Preview not available for this file. Please download it.');
+      setShowPreviewModal(true);
+    }
   };
 
   const getDocuments = async () => {
@@ -561,13 +617,47 @@ const Dashboard = ({ user, setUser }) => {
         <div className="header-title">
           <h1>Document Management System</h1>
           <p>{user.role} Dashboard</p>
+          <div className="dashboard-tabs" role="tablist" aria-label="Dashboard sections">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'files'}
+              className={`dashboard-tab ${activeSection === 'files' ? 'dashboard-tab-active' : ''}`}
+              onClick={() => {
+                setActiveSection('files');
+                if (user.role === 'Admin') {
+                  setAdminFilesView('folders');
+                  setAdminSelectedFolderLabel('');
+                  setFilterUser('');
+                  setSearchTerm('');
+                  setFilterSession('');
+                  setFilterSemester('');
+                }
+              }}
+            >
+              Files
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'tasks'}
+              className={`dashboard-tab ${activeSection === 'tasks' ? 'dashboard-tab-active' : ''}`}
+              onClick={() => setActiveSection('tasks')}
+            >
+              Tasks
+            </button>
+          </div>
         </div>
         <div className="header-actions">
           {user.role === 'Admin' && (
             <button onClick={() => setShowUserModal(true)} className="add-user-btn">+ Add User</button>
           )}
-          <button onClick={handleMergeExcel} className="header-action-btn">Merge Excel</button>
-          <button onClick={handleMergePdf} className="header-action-btn">Merge PDF</button>
+          {activeSection === 'files' && !(user.role === 'Admin' && adminFilesView === 'folders') && (
+            <>
+              <button onClick={handleMergeExcel} className="header-action-btn">Merge Excel</button>
+              <button onClick={handleMergePdf} className="header-action-btn">Merge PDF</button>
+            </>
+          )}
           {user.role === 'Admin' && (
             <>
               <button onClick={() => setShowUserList(!showUserList)} className="header-action-btn">
@@ -583,163 +673,272 @@ const Dashboard = ({ user, setUser }) => {
           <button onClick={handleLogout} className="logout-btn">Logout</button>
         </div>
       </header>
-      <main className="dashboard-main">
-        <div className="dashboard-sidebar">
-          <section className="dashboard-card upload-card">
-            <div className="upload-card-content">
-              <div className="upload-card-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <main
+        className={`dashboard-main ${
+          activeSection === 'tasks' || (activeSection === 'files' && user.role === 'Admin' && adminFilesView === 'folders')
+            ? 'dashboard-main--single'
+            : ''
+        }`}
+      >
+        {activeSection === 'files' && !(user.role === 'Admin' && adminFilesView === 'folders') && (
+          <div className="dashboard-sidebar">
+            <section className="dashboard-card upload-card">
+              <div className="upload-card-content">
+                <div className="upload-card-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div>
+                  <h2 className="upload-card-title">Upload Documents</h2>
+                  <p className="upload-card-description">Store exam timetables, circulars and reports in one secure place.</p>
+                </div>
               </div>
-              <div>
-                <h2 className="upload-card-title">Upload Documents</h2>
-                <p className="upload-card-description">Store exam timetables, circulars and reports in one secure place.</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="upload-open-btn"
-              onClick={() => setShowUploadModal(true)}
-            >
-              Upload Document
-            </button>
-            {message && <div className={`dashboard-alert ${message.toLowerCase().includes('error') ? 'dashboard-alert-error' : 'dashboard-alert-success'}`}>{message}</div>}
-          </section>
-        </div>
+              <button
+                type="button"
+                className="upload-open-btn"
+                onClick={() => setShowUploadModal(true)}
+              >
+                Upload Document
+              </button>
+              {message && <div className={`dashboard-alert ${message.toLowerCase().includes('error') ? 'dashboard-alert-error' : 'dashboard-alert-success'}`}>{message}</div>}
+            </section>
+          </div>
+        )}
 
         <div className="dashboard-content">
-          <section className="dashboard-card">
-            <div className="filter-controls">
-              <input
-                type="text"
-                placeholder="Search documents..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <select value={filterSession} onChange={(e) => setFilterSession(e.target.value)}>
-                <option value="">All Sessions</option>
-                {[...new Set(documents.map(d => d.session))].map(s => s && <option key={s} value={s}>{s}</option>)}
-              </select>
-              <select value={filterSemester} onChange={(e) => setFilterSemester(e.target.value)}>
-                <option value="">All Semesters</option>
-                {[...new Set(documents.map(d => d.semester))].map(s => s && <option key={s} value={s}>{s}</option>)}
-              </select>
+          {activeSection === 'files' && (
+            <>
+              {user.role === 'Admin' && adminFilesView === 'folders' && (
+                <section className="dashboard-card folder-grid-card">
+                  <div className="folder-grid-header">
+                    <h2>Folders</h2>
+                  </div>
+                  <div className="folder-grid" role="list">
+                    <button
+                      type="button"
+                      className={`folder-tile ${filterUser === '' ? 'folder-tile-active' : ''}`}
+                      aria-current={filterUser === '' ? 'page' : undefined}
+                      onClick={() => {
+                        setFilterUser('');
+                        setAdminSelectedFolderLabel('All Files');
+                        setAdminFilesView('files');
+                        setSearchTerm('');
+                        setFilterSession('');
+                        setFilterSemester('');
+                      }}
+                    >
+                      <div className="folder-tile-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.92 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                      </div>
+                      <div className="folder-tile-meta">
+                        <div className="folder-tile-name">All Files</div>
+                        <div className="folder-tile-count">{documents.length} files</div>
+                      </div>
+                    </button>
+
+                    {users.map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className={`folder-tile ${String(u.id) === filterUser ? 'folder-tile-active' : ''}`}
+                        aria-current={String(u.id) === filterUser ? 'page' : undefined}
+                        onClick={() => {
+                          setFilterUser(String(u.id));
+                          setAdminSelectedFolderLabel(u.username);
+                          setAdminFilesView('files');
+                          setSearchTerm('');
+                          setFilterSession('');
+                          setFilterSemester('');
+                        }}
+                      >
+                        <div className="folder-tile-icon" aria-hidden="true">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.92 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                        </div>
+                        <div className="folder-tile-meta">
+                          <div className="folder-tile-name">{u.username}</div>
+                          <div className="folder-tile-count">{documentCountsByUserId[String(u.id)] || 0} files</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {user.role === 'Admin' && adminFilesView === 'files' && (
+                <section className="dashboard-card files-view-header">
+                  <div className="files-view-header-inner">
+                    <button
+                      type="button"
+                      className="files-back-btn"
+                      onClick={() => {
+                        setAdminFilesView('folders');
+                        setAdminSelectedFolderLabel('');
+                        setFilterUser('');
+                        setSearchTerm('');
+                        setFilterSession('');
+                        setFilterSemester('');
+                      }}
+                    >
+                      Back to folders
+                    </button>
+                    <div className="files-view-title">
+                      {adminSelectedFolderLabel ? `Files • ${adminSelectedFolderLabel}` : 'Files'}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {(user.role !== 'Admin' || adminFilesView === 'files') && (
+                <>
+                  <section className="dashboard-card">
+                    <div className="filter-controls">
+                      <input
+                        type="text"
+                        placeholder="Search documents..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                      <select value={filterSession} onChange={(e) => setFilterSession(e.target.value)}>
+                        <option value="">All Sessions</option>
+                        {[...new Set(documents.map(d => d.session))].map(s => s && <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select value={filterSemester} onChange={(e) => setFilterSemester(e.target.value)}>
+                        <option value="">All Semesters</option>
+                        {[...new Set(documents.map(d => d.semester))].map(s => s && <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </section>
+
+                  <DocumentList
+                    documents={filteredDocuments}
+                    user={user}
+                    groupDocumentsByUser={groupDocumentsByUser}
+                    handleDownload={handleDownload}
+                    handleDelete={handleDelete}
+                    handlePreview={handlePreview}
+                    forceUngrouped={user.role === 'Admin'}
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          {activeSection === 'tasks' && (
+            <>
+              {message && (
+                <div className={`dashboard-alert ${message.toLowerCase().includes('error') ? 'dashboard-alert-error' : 'dashboard-alert-success'}`}>
+                  {message}
+                </div>
+              )}
+
               {user.role === 'Admin' && (
-                <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
-                  <option value="">All Users</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-                </select>
-              )}
-            </div>
-          </section>
-          {user.role === 'Admin' && (
-            <section className="dashboard-card assignments-card">
-              <div className="assignments-header">
-                <h2>Tasks / Requests</h2>
-                <button
-                  type="button"
-                  className="header-action-btn"
-                  onClick={() => setShowAssignmentModal(true)}
-                >
-                  New Task
-                </button>
-              </div>
-              {assignments.length === 0 ? (
-                <p>No tasks created yet.</p>
-              ) : (
-                <div className="assignment-list">
-                  {assignments.map(a => (
-                    <div key={a.id} className="assignment-row">
-                      <div className="assignment-main">
-                        <div className="assignment-title">{a.title}</div>
-                        {a.description && (
-                          <div className="assignment-description">
-                            {a.description}
+                <section className="dashboard-card assignments-card">
+                  <div className="assignments-header">
+                    <h2>Tasks / Requests</h2>
+                    <button
+                      type="button"
+                      className="header-action-btn"
+                      onClick={() => setShowAssignmentModal(true)}
+                    >
+                      New Task
+                    </button>
+                  </div>
+                  {assignments.length === 0 ? (
+                    <p>No tasks created yet.</p>
+                  ) : (
+                    <div className="assignment-list">
+                      {assignments.map(a => (
+                        <div key={a.id} className="assignment-row">
+                          <div className="assignment-main">
+                            <div className="assignment-title">{a.title}</div>
+                            {a.description && (
+                              <div className="assignment-description">
+                                {a.description}
+                              </div>
+                            )}
+                            <div className="assignment-meta">
+                              <span>
+                                Due: {a.due_at ? formatDateTime(a.due_at) : 'No deadline'}
+                              </span>
+                              <span>Created at: {formatDateTime(a.created_at)}</span>
+                            </div>
                           </div>
-                        )}
-                        <div className="assignment-meta">
-                          <span>
-                            Due: {a.due_at ? formatDateTime(a.due_at) : 'No deadline'}
-                          </span>
-                          <span>Created at: {formatDateTime(a.created_at)}</span>
-                        </div>
-                      </div>
-                      <div className="assignment-actions">
-                        <div className="assignment-counts">
-                          <span>Assigned: {a.assigned_count || 0}</span>
-                          <span>Submitted: {a.submitted_count || 0}</span>
-                          <span>Late: {a.late_count || 0}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="assignment-view-btn"
-                          onClick={() => openAssignmentDetail(a)}
-                        >
-                          View details
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {user.role !== 'Admin' && (
-            <section className="dashboard-card my-assignments-card">
-              <div className="assignments-header">
-                <h2>My Tasks</h2>
-              </div>
-              {myAssignments.length === 0 ? (
-                <p>No tasks assigned to you.</p>
-              ) : (
-                <div className="assignment-list">
-                  {myAssignments.map(a => (
-                    <div key={a.id} className="assignment-row">
-                      <div className="assignment-main">
-                        <div className="assignment-title">{a.title}</div>
-                        {a.description && (
-                          <div className="assignment-description">
-                            {a.description}
+                          <div className="assignment-actions">
+                            <div className="assignment-counts">
+                              <span>Assigned: {a.assigned_count || 0}</span>
+                              <span>Submitted: {a.submitted_count || 0}</span>
+                              <span>Late: {a.late_count || 0}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="assignment-view-btn"
+                              onClick={() => openAssignmentDetail(a)}
+                            >
+                              View details
+                            </button>
                           </div>
-                        )}
-                        <div className="assignment-meta">
-                          <span>
-                            Due: {a.due_at ? formatDateTime(a.due_at) : 'No deadline'}
-                          </span>
-                          {a.submitted_at && (
-                            <span>Submitted: {formatDateTime(a.submitted_at)}</span>
-                          )}
                         </div>
-                      </div>
-                      <div className="assignment-actions">
-                        <span
-                          className={
-                            'assignment-status-pill ' +
-                            (a.status === 'submitted'
-                              ? 'assignment-status-submitted'
-                              : a.status === 'late'
-                              ? 'assignment-status-late'
-                              : 'assignment-status-pending')
-                          }
-                        >
-                          {a.status || 'pending'}
-                        </span>
-                        <button
-                          type="button"
-                          className="assignment-submit-btn"
-                          onClick={() => openAssignmentSubmit(a)}
-                        >
-                          {a.status === 'pending' ? 'Submit' : 'Submit more'}
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </section>
               )}
-            </section>
-          )}
 
-          <DocumentList documents={filteredDocuments} user={user} groupDocumentsByUser={groupDocumentsByUser} handleDownload={handleDownload} handleDelete={handleDelete} />
+              {user.role !== 'Admin' && (
+                <section className="dashboard-card my-assignments-card">
+                  <div className="assignments-header">
+                    <h2>My Tasks</h2>
+                  </div>
+                  {myAssignments.length === 0 ? (
+                    <p>No tasks assigned to you.</p>
+                  ) : (
+                    <div className="assignment-list">
+                      {myAssignments.map(a => (
+                        <div key={a.id} className="assignment-row">
+                          <div className="assignment-main">
+                            <div className="assignment-title">{a.title}</div>
+                            {a.description && (
+                              <div className="assignment-description">
+                                {a.description}
+                              </div>
+                            )}
+                            <div className="assignment-meta">
+                              <span>
+                                Due: {a.due_at ? formatDateTime(a.due_at) : 'No deadline'}
+                              </span>
+                              {a.submitted_at && (
+                                <span>Submitted: {formatDateTime(a.submitted_at)}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="assignment-actions">
+                            <span
+                              className={
+                                'assignment-status-pill ' +
+                                (a.status === 'submitted'
+                                  ? 'assignment-status-submitted'
+                                  : a.status === 'late'
+                                  ? 'assignment-status-late'
+                                  : 'assignment-status-pending')
+                              }
+                            >
+                              {a.status || 'pending'}
+                            </span>
+                            <button
+                              type="button"
+                              className="assignment-submit-btn"
+                              onClick={() => openAssignmentSubmit(a)}
+                            >
+                              {a.status === 'pending' ? 'Submit' : 'Submit more'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+            </>
+          )}
           
       {/* User List Modal */}
       {showUserList && (
@@ -1139,6 +1338,39 @@ const Dashboard = ({ user, setUser }) => {
               <button onClick={() => { setShowMergeModal(false); setSelectedDocs([]); setMergedFileName(''); }} className="btn-cancel" disabled={isLoading}>
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPreviewModal && (
+        <div className="dashboard-modal-overlay">
+          <div className="dashboard-modal preview-modal">
+            <div className="dashboard-modal-header">
+              <h3>{previewTitle || 'Preview'}</h3>
+              <button onClick={closePreviewModal} className="dashboard-modal-close">&times;</button>
+            </div>
+            <div className="dashboard-modal-body">
+              {previewError ? (
+                <p className="modal-message">{previewError}</p>
+              ) : previewUrl && (previewMime.includes('pdf') || previewUrl.endsWith('.pdf')) ? (
+                <iframe
+                  title="Document preview"
+                  src={previewUrl}
+                  style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '10px' }}
+                />
+              ) : previewUrl && previewMime.startsWith('image/') ? (
+                <img
+                  src={previewUrl}
+                  alt={previewTitle || 'Preview'}
+                  style={{ maxWidth: '100%', height: 'auto', borderRadius: '10px', display: 'block' }}
+                />
+              ) : (
+                <p className="modal-message">Preview not available for this file type. Please download it.</p>
+              )}
+            </div>
+            <div className="dashboard-modal-footer">
+              <button type="button" onClick={closePreviewModal} className="btn-cancel">Close</button>
             </div>
           </div>
         </div>

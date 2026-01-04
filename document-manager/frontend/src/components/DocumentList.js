@@ -1,13 +1,13 @@
 import React from 'react';
 
-const DocumentList = ({ documents, user, groupDocumentsByUser, handleDownload, handleDelete }) => {
+const DocumentList = ({ documents, user, groupDocumentsByUser, handleDownload, handleDelete, handlePreview, forceUngrouped = false }) => {
 
   const renderDocMeta = (doc) => (
     <div className="doc-meta">
-      <span>🗓️ {doc.session}</span>
-      <span>📚 Semester {doc.semester}</span>
-      <span>📄 {doc.file_path.split('.').pop().toUpperCase()}</span>
-      <span>🕒 {new Date(doc.created_at).toLocaleDateString()}</span>
+      <span>Session: {doc.session || '—'}</span>
+      <span>Semester: {doc.semester || '—'}</span>
+      <span>Type: {doc.file_path.split('.').pop().toUpperCase()}</span>
+      <span>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</span>
     </div>
   );
 
@@ -18,6 +18,9 @@ const DocumentList = ({ documents, user, groupDocumentsByUser, handleDownload, h
         {renderDocMeta(doc)}
       </div>
       <div className="doc-actions">
+        {handlePreview && (
+          <button onClick={() => handlePreview(doc)} className="view-btn">View</button>
+        )}
         <button onClick={() => handleDownload(doc.id)} className="download-btn">Download</button>
         <button onClick={() => handleDelete(doc.id)} className="delete-btn">Delete</button>
       </div>
@@ -28,7 +31,7 @@ const DocumentList = ({ documents, user, groupDocumentsByUser, handleDownload, h
     <div className="document-list-container">
       {documents.length === 0 ? (
         <div className="empty-list">No documents found.</div>
-      ) : user.role === 'Admin' ? (
+      ) : user.role === 'Admin' && !forceUngrouped ? (
         Object.entries(groupDocumentsByUser(documents)).map(([displayName, userDocs]) => (
           <div key={displayName} className="user-doc-group">
             <div className="user-group-header">
