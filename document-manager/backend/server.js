@@ -11,11 +11,19 @@ const assignmentRoutes = require('./routes/assignmentRoutes');
 initDb();
 
 const app = express();
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://document-manager-navy-beta.vercel.app',
+  'https://document-manager-hzqnrovrh-ankur-rajs-projects-743e67f4.vercel.app'
+];
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
