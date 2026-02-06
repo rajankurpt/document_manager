@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 import DocumentUpload from './DocumentUpload'; // Import the new component
 import DocumentList from './DocumentList';     // Import the new component
 import './Dashboard.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5005/api/documents';
-const AUTH_API_URL = process.env.REACT_APP_AUTH_API_URL || 'http://localhost:5005/api/auth';
-const ASSIGN_API_URL = process.env.REACT_APP_ASSIGN_API_URL || 'http://localhost:5005/api/assignments';
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+const API_URL = `${BASE_URL}/api/documents`;
+const AUTH_API_URL = `${BASE_URL}/api/auth`;
+const ASSIGN_API_URL = `${BASE_URL}/api/assignments`;
 
 const Dashboard = ({ user, setUser }) => {
   const [documents, setDocuments] = useState([]);
@@ -61,6 +64,8 @@ const Dashboard = ({ user, setUser }) => {
   const [previewMime, setPreviewMime] = useState('');
   const [previewTitle, setPreviewTitle] = useState('');
   const [previewError, setPreviewError] = useState('');
+  const [previewTable, setPreviewTable] = useState(null);
+  const [previewTableMeta, setPreviewTableMeta] = useState({ sheetName: '', truncated: false });
 
   const documentCountsByUserId = documents.reduce((acc, doc) => {
     const key = String(doc.user_id);
@@ -80,6 +85,8 @@ const Dashboard = ({ user, setUser }) => {
     setPreviewError('');
     setPreviewMime('');
     setPreviewTitle('');
+    setPreviewTable(null);
+    setPreviewTableMeta({ sheetName: '', truncated: false });
     if (previewUrl) {
       window.URL.revokeObjectURL(previewUrl);
     }
@@ -90,12 +97,58 @@ const Dashboard = ({ user, setUser }) => {
     try {
       setPreviewError('');
       setPreviewTitle(doc?.title || 'Preview');
+      setPreviewTable(null);
+      setPreviewTableMeta({ sheetName: '', truncated: false });
       if (previewUrl) {
         window.URL.revokeObjectURL(previewUrl);
         setPreviewUrl('');
       }
 
+      const filePath = doc?.file_path || '';
+      const ext = filePath.includes('.') ? filePath.split('.').pop().toLowerCase() : '';
+      const isExcel = ext === 'xlsx' || ext === 'xls';
+
       const token = localStorage.getItem('token');
+      if (!token) {
+        setPreviewError('Your session expired. Please login again and retry preview.');
+        setShowPreviewModal(true);
+        return;
+      }
+
+      if (isExcel) {
+        const response = await axios.get(`${API_URL}/${doc.id}/download`, {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'arraybuffer',
+        });
+
+        let workbook;
+        try {
+          workbook = XLSX.read(response.data, { type: 'array' });
+        } catch (_e) {
+          workbook = XLSX.read(new Uint8Array(response.data), { type: 'array' });
+        }
+
+        const sheetName = workbook.SheetNames?.[0] || '';
+        const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+        if (!sheet) {
+          setPreviewError('Could not read the Excel sheet for preview. Please download the file.');
+          setShowPreviewModal(true);
+          return;
+        }
+
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+        const maxRows = 200;
+        const maxCols = 20;
+        const truncated = rows.length > maxRows || rows.some(r => Array.isArray(r) && r.length > maxCols);
+        const sliced = rows.slice(0, maxRows).map(r => (Array.isArray(r) ? r.slice(0, maxCols) : []));
+
+        setPreviewMime('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        setPreviewTable(sliced);
+        setPreviewTableMeta({ sheetName, truncated });
+        setShowPreviewModal(true);
+        return;
+      }
+
       const response = await axios.get(`${API_URL}/${doc.id}/download`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
@@ -1353,6 +1406,27 @@ const Dashboard = ({ user, setUser }) => {
             <div className="dashboard-modal-body">
               {previewError ? (
                 <p className="modal-message">{previewError}</p>
+              ) : previewTable ? (
+                <div className="preview-table-wrap">
+                  {previewTableMeta.sheetName && (
+                    <div className="preview-table-caption">Sheet: {previewTableMeta.sheetName}</div>
+                  )}
+                  {previewTableMeta.truncated && (
+                    <div className="preview-table-caption">Showing first 200 rows and first 20 columns.</div>
+                  )}
+                  <table className="preview-table">
+                    <tbody>
+                      {previewTable.map((row, rowIdx) => (
+                        <tr key={rowIdx}>
+                          {(row || []).map((cell, colIdx) => {
+                            const Tag = rowIdx === 0 ? 'th' : 'td';
+                            return <Tag key={colIdx}>{cell === null || cell === undefined ? '' : String(cell)}</Tag>;
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : previewUrl && (previewMime.includes('pdf') || previewUrl.endsWith('.pdf')) ? (
                 <iframe
                   title="Document preview"
